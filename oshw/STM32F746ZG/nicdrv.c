@@ -149,6 +149,8 @@ int ecx_setupnic(ecx_portt *port, const char *ifname, int secondary)
 		return 0;
 	}
 
+	*psock = 0;
+
 	for (i = 0; i < EC_MAXBUF; i++)
 	{
 		ec_setupheader(&(port->txbuf[i]));
@@ -157,4 +159,41 @@ int ecx_setupnic(ecx_portt *port, const char *ifname, int secondary)
 	ec_setupheader(&(port->txbuf2));
 
 	return 1;
+}
+
+/** Close sockets used
+ * @param[in] port        = port context struct
+ * @return 0
+ */
+int ecx_closenic(ecx_portt *port)
+{
+	if (port->sockhandle >= 0)
+	{
+		Ethernet_close();
+		port->sockhandle = -1;
+	}
+
+	if ((port->redport) && (port->redport->sockhandle >= 0))
+	{
+		port->redport->sockhandle = -1;
+	}
+	return 0;
+}
+
+/** Fill buffer with ethernet header structure.
+ * Destination MAC is always broadcast.
+ * Ethertype is always ETH_P_ECAT.
+ * @param[out] p = buffer
+ */
+void ec_setupheader(void *p)
+{
+   ec_etherheadert *bp;
+   bp = p;
+   bp->da0 = htons(0xffff);
+   bp->da1 = htons(0xffff);
+   bp->da2 = htons(0xffff);
+   bp->sa0 = htons(priMAC[0]);
+   bp->sa1 = htons(priMAC[1]);
+   bp->sa2 = htons(priMAC[2]);
+   bp->etype = htons(ETH_P_ECAT);
 }
