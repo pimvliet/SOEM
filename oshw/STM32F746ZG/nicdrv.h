@@ -16,8 +16,6 @@ extern "C"
 {
 #endif
 
-#include <pthread.h>
-
 /** pointer structure to Tx and Rx stacks */
 typedef struct
 {
