@@ -45,7 +45,7 @@ static uint16_t htons(uint16_t data)
 	return data;
 }
 
-// networkt byte order to host byte order
+// network byte order to host byte order
 static uint16_t ntohs(uint16_t data)
 {
 	uint16_t temp = 0;
@@ -70,11 +70,9 @@ enum
  * differentiate the route the packet traverses through the EtherCAT
  * segment. This is needed to fund out the packet flow in redundant
  * configurations. */
-const uint16 priMAC[3] =
-{ 0x0101, 0x0101, 0x0101 };
+const uint16 priMAC[3] = { 0x0101, 0x0101, 0x0101 };
 /** Secondary source MAC address used for EtherCAT. */
-const uint16 secMAC[3] =
-{ 0x0404, 0x0404, 0x0404 };
+const uint16 secMAC[3] = { 0x0404, 0x0404, 0x0404 };
 
 /** second MAC word is used for identification */
 #define RX_PRIM priMAC[1]
@@ -103,10 +101,10 @@ int ecx_setupnic(ecx_portt *port, const char *ifname, int secondary)
 
 	if (secondary)
 	{
-		/* secondary port struct available? */
+		// secondary port struct available?
 		if (port->redport)
 		{
-			/* when using secondary socket it is automatically a redundant setup */
+			// when using secondary socket it is automatically a redundant setup
 			psock = &(port->redport->sockhandle);
 			*psock = -1;
 			port->redstate = ECT_RED_DOUBLE;
@@ -121,7 +119,7 @@ int ecx_setupnic(ecx_portt *port, const char *ifname, int secondary)
 		}
 		else
 		{
-			/* fail */
+			// redport not available
 			return 0;
 		}
 	}
@@ -141,11 +139,12 @@ int ecx_setupnic(ecx_portt *port, const char *ifname, int secondary)
 		psock = &(port->sockhandle);
 	}
 
-	int res = Ethernet_Init();
+	//int res = Ethernet_Init();
+	int res = 0;
 
-	if(!res)
+	if (!res)
 	{
-		//Interface was not able to open
+		// Interface was not able to open
 		return 0;
 	}
 
@@ -169,7 +168,7 @@ int ecx_closenic(ecx_portt *port)
 {
 	if (port->sockhandle >= 0)
 	{
-		Ethernet_close();
+		//Ethernet_Close();
 		port->sockhandle = -1;
 	}
 
@@ -177,6 +176,7 @@ int ecx_closenic(ecx_portt *port)
 	{
 		port->redport->sockhandle = -1;
 	}
+
 	return 0;
 }
 
@@ -187,13 +187,13 @@ int ecx_closenic(ecx_portt *port)
  */
 void ec_setupheader(void *p)
 {
-   ec_etherheadert *bp;
-   bp = p;
-   bp->da0 = htons(0xffff);
-   bp->da1 = htons(0xffff);
-   bp->da2 = htons(0xffff);
-   bp->sa0 = htons(priMAC[0]);
-   bp->sa1 = htons(priMAC[1]);
-   bp->sa2 = htons(priMAC[2]);
-   bp->etype = htons(ETH_P_ECAT);
+	ec_etherheadert *bp;
+	bp = p;
+	bp->da0 = htons(0xffff);
+	bp->da1 = htons(0xffff);
+	bp->da2 = htons(0xffff);
+	bp->sa0 = htons(priMAC[0]);
+	bp->sa1 = htons(priMAC[1]);
+	bp->sa2 = htons(priMAC[2]);
+	bp->etype = htons(ETH_P_ECAT);
 }

@@ -16,6 +16,8 @@ extern "C"
 {
 #endif
 
+#include "ethercattype.h"
+
 /** pointer structure to Tx and Rx stacks */
 typedef struct
 {
