@@ -33,25 +33,24 @@
 
 #include "nicdrv.h"
 #include "osal.h"
-#include "haleth.h"
 
 // host byte order to network byte order
 static uint16_t htons(uint16_t data)
 {
-	uint16_t temp = 0;
-	temp = (data & 0x00ff) << 8;
-	temp |= (data & 0xff00) >> 8;
-	data = temp;
+	uint16_t tmp = 0;
+	tmp		=	(data & 0x00ff) << 8;
+	tmp		|=	(data & 0xff00) >> 8;
+	data	=	tmp;
 	return data;
 }
 
-// network byte order to host byte order
+// networkt byte order to host byte order
 static uint16_t ntohs(uint16_t data)
 {
-	uint16_t temp = 0;
-	temp = (data & 0x00ff) << 8;
-	temp |= (data & 0xff00) >> 8;
-	data = temp;
+	uint16_t tmp = 0;
+	tmp		=	(data & 0x00ff) << 8;
+	tmp		|=	(data & 0xff00) >> 8;
+	data	=	tmp;
 	return data;
 }
 
