@@ -14,13 +14,14 @@ GPIO_TypeDef* m_rstPort;
 uint8_t SPIReadWrite(uint8_t data)
 {
 	//wait until FIFO has a free slot
-	while ((hspi1.Instance->SR & SPI_FLAG_TXE) != SPI_FLAG_TXE);
+	SPI_TypeDef* SPI = hspi1.Instance;
+	while (!(SPI->SR & SPI_FLAG_TXE));
 
-	*(__IO uint8_t*) &hspi1.Instance->DR = data;
+	*(__IO uint8_t*) &SPI->DR = data;
 
-	while ((hspi1.Instance->SR & SPI_FLAG_RXNE) != SPI_FLAG_RXNE);
+	while (!(SPI->SR & SPI_FLAG_RXNE));
 
-	return (*(__IO uint8_t*) &hspi1.Instance->DR);
+	return (*(__IO uint8_t*) &SPI->DR);
 }
 
 void wizchip_select(void)
@@ -97,11 +98,11 @@ void W5500Init(GPIO_TypeDef* csPort, uint16_t csPin, GPIO_TypeDef* rstPort, uint
 
 	W5500IOInit();
 
+
 	HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_SET);
 
 	HAL_GPIO_WritePin(m_rstPort, m_rstPin, GPIO_PIN_RESET);
-	tmp = 0xff;
-	while (tmp--);
+	HAL_Delay(10);
 	HAL_GPIO_WritePin(m_rstPort, m_rstPin, GPIO_PIN_SET);
 
 	reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
