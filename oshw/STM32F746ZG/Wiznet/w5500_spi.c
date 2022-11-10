@@ -108,11 +108,12 @@ void W5500Init(GPIO_TypeDef* csPort, uint16_t csPin, GPIO_TypeDef* rstPort, uint
 	reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
 	reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
 	reg_wizchip_spiburst_cbfunc(wizchip_readburst, wizchip_writeburst);
-
+#if 1
 	if (ctlwizchip(CW_INIT_WIZCHIP, (void*)memsize) == -1)
 	{
 		printf("WIZCHIP Initialize fail.\r\n");
 		while(1);																	//TODO remove infinite loop
 	}
+#endif
 	printf("WIZCHIP Initialize success.\r\n");
 }

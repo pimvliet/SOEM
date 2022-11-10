@@ -36,6 +36,73 @@
 #include "osal.h"
 #include "oshw.h"
 #include "socket_w5500.h"
+#include "w5500.h"
+
+int16_t sendRAW(uint8_t sn, uint8_t * buf, uint16_t len)
+{
+	while(1)
+	{
+		uint16_t freesize = getSn_TX_FSR(0);
+		if (getSn_SR(0) == SOCK_CLOSED)
+			return -1;
+		if (len <= freesize)
+			break;
+	}
+
+	wiz_send_data(0, buf, len);
+	setSn_CR(0, Sn_CR_SEND);
+
+	while(1)
+	{
+		uint8_t tmp = getSn_IR(0);
+		if (tmp & Sn_IR_SENDOK)
+		{
+			setSn_IR(0, Sn_IR_SENDOK);
+			break;
+		}
+		else if (tmp & Sn_IR_TIMEOUT)
+		{
+			setSn_IR(0, Sn_IR_TIMEOUT);
+			return -1;
+		}
+	}
+	return len;
+}
+
+uint16_t recvRAW(uint8_t sn, uint8_t * buf, uint16_t bufsize)
+{
+	uint16_t len = getSn_RX_RSR(0);
+
+	if (len > 0)
+	{
+		uint8_t head[2];
+		uint16_t data_len = 0;
+
+		wiz_recv_data(0, head, 2);
+		setSn_CR(0, Sn_CR_RECV);
+
+		data_len = head[0];
+		data_len = (data_len << 8) + head[1];
+		data_len -= 2;
+
+		if (data_len > bufsize)
+		{
+			wiz_recv_ignore(0, data_len);
+			setSn_CR(0, Sn_CR_RECV);
+			return 0;
+		}
+
+		wiz_recv_data(0, buf, data_len);
+		setSn_CR(0, Sn_CR_RECV);
+
+		if ((buf[0] & 0x01) || memcpy(&buf[0], priMAC, 6) == 0)
+			return data_len;
+		else
+			return 0;
+	}
+	return 0;
+}
+
 
 /** Redundancy modes */
 enum
@@ -80,7 +147,7 @@ static void ecx_clear_rxbufstat(int *rxbufstat)
  */
 int ecx_setupnic(ecx_portt *port, const char *ifname, int secondary)
 {
-	int i, rval;
+	int i;
 	int *psock;
 
 	if (secondary)
@@ -123,9 +190,33 @@ int ecx_setupnic(ecx_portt *port, const char *ifname, int secondary)
 		psock = &(port->sockhandle);
 	}
 
-	rval = socket(0, Sn_MR_MACRAW, 0, 0x00);
+#if 0
+	wizchip_sw_reset();
 
+	setSn_RXBUF_SIZE(0, 16);
+	setSn_TXBUF_SIZE(0, 16);
+
+	uint8_t priMAC2[6] = {0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+	setSHAR(priMAC2);
+
+	int retval;
+	setSn_MR(0, Sn_MR_MACRAW);
+	setSn_CR(0, Sn_CR_OPEN);
+	retval = getSn_MR(0);
+	while(getSn_CR(0));
+	while(getSn_SR(0) == SOCK_CLOSED);
+	retval = getSn_SR(0);
+	if (retval != SOCK_MACRAW)
+	{
+		// Failed to put socket 0 into MACRaw mode
+		return 0;
+	}
+
+	*psock = 0;
+#else
+	int rval = socket(0, Sn_MR_MACRAW, 30303, 0);
 	*psock = rval;
+#endif
 
 	for (i = 0; i < EC_MAXBUF; i++)
 	{
@@ -133,10 +224,7 @@ int ecx_setupnic(ecx_portt *port, const char *ifname, int secondary)
 		port->rxbufstat[i] = EC_BUF_EMPTY;
 	}
 	ec_setupheader(&(port->txbuf2));
-	if (rval < 0)
-		return 0;
-	else
-		return 1;
+	return 1;
 }
 
 /** Close sockets used
@@ -240,7 +328,9 @@ int ecx_outframe(ecx_portt *port, uint8 idx, int stacknumber)
 
 	lp = (*stack->txbuflength)[idx];
 	(*stack->rxbufstat)[idx] = EC_BUF_TX;
-	rval = send(*stack->sock, (*stack->txbuf)[idx], lp);
+
+	rval = sendRAW(*stack->sock, (*stack->txbuf)[idx], lp);
+
 	if (rval < 0)
 	{
 		(*stack->rxbufstat)[idx] = EC_BUF_EMPTY;
@@ -264,6 +354,8 @@ int ecx_outframe_red(ecx_portt *port, uint8 idx)
 	ehp->sa1 = oshw_htons(priMAC[1]);
 
 	rval = ecx_outframe(port, idx, 0);
+	/* Redundancy is not supported using a single port */
+#if 0
 	if (port->redstate != ECT_RED_NONE)
 	{
 		ehp = (ec_etherheadert*) &(port->txbuf2);
@@ -280,6 +372,7 @@ int ecx_outframe_red(ecx_portt *port, uint8 idx)
 			port->redport->rxbufstat[idx] = EC_BUF_EMPTY;
 		}
 	}
+#endif
 
 	return rval;
 }
@@ -300,7 +393,13 @@ static int ecx_recvpkt(ecx_portt *port, int stacknumber)
 		stack = &(port->redport->stack);
 
 	lp = sizeof(port->tempinbuf);
-	bytesrx = recv(*stack->sock, (*stack->tempbuf), lp);
+#if 1
+	bytesrx = recvRAW(*stack->sock, (*stack->tempbuf), lp);
+#else
+	uint8_t dummyip[4];
+	uint16_t dummyport;
+	bytesrx = recvfrom(*stack->sock, (*stack->tempbuf), lp, dummyip, &dummyport);
+#endif
 	port->tempinbufs = bytesrx;
 
 	return (bytesrx > 0);
@@ -417,7 +516,8 @@ static int ecx_waitinframe_red(ecx_portt *port, uint8 idx, osal_timert *timer)
 			if (wkc2 <= EC_NOFRAME)
 				wkc2 = ecx_inframe(port, idx, 1);
 		}
-	} while (((wkc <= EC_NOFRAME) || (wkc2 <= EC_NOFRAME)) && !osal_timer_is_expired(timer));
+	} while (((wkc <= EC_NOFRAME) || (wkc2 <= EC_NOFRAME))
+			&& !osal_timer_is_expired(timer));
 
 	if (port->redstate != ECT_RED_NONE)
 	{
@@ -435,16 +535,16 @@ static int ecx_waitinframe_red(ecx_portt *port, uint8 idx, osal_timert *timer)
 			wkc = wkc2;
 		}
 
-		if(((primrx == 0) && (secrx == RX_SEC)) || ((primrx == RX_PRIM) && (secrx == RX_SEC)))
+		if (((primrx == 0) && (secrx == RX_SEC)) || ((primrx == RX_PRIM) && (secrx == RX_SEC)))
 		{
 			if ((primrx == RX_PRIM) && (secrx == RX_SEC))
-				memcpy(&(port->txbuf[idx][ETH_HEADERSIZE]), &(port->rxbuf[idx]), port->txbuflength[idx] - ETH_HEADERSIZE);
+			memcpy(&(port->txbuf[idx][ETH_HEADERSIZE]), &(port->rxbuf[idx]), port->txbuflength[idx] - ETH_HEADERSIZE);
 			osal_timer_start(&timer2, EC_TIMEOUTRET);
 			ecx_outframe(port, idx, 1);
 			do
 			{
 				wkc2 = ecx_inframe(port, idx, 1);
-			} while ((wkc2 <= EC_NOFRAME) && !osal_timer_is_expired(&timer2));
+			}while ((wkc2 <= EC_NOFRAME) && !osal_timer_is_expired(&timer2));
 			if (wkc2 > EC_NOFRAME)
 			{
 				memcpy(&(port->rxbuf[idx]), &(port->redport->rxbuf[idx]), port->txbuflength[idx] - ETH_HEADERSIZE);
@@ -464,13 +564,13 @@ static int ecx_waitinframe_red(ecx_portt *port, uint8 idx, osal_timert *timer)
  */
 int ecx_waitinframe(ecx_portt *port, uint8 idx, int timeout)
 {
-   int wkc;
-   osal_timert timer;
+	int wkc;
+	osal_timert timer;
 
-   osal_timer_start (&timer, timeout);
-   wkc = ecx_waitinframe_red(port, idx, &timer);
+	osal_timer_start(&timer, timeout);
+	wkc = ecx_waitinframe_red(port, idx, &timer);
 
-   return wkc;
+	return wkc;
 }
 
 /** Blocking send and receive frame function. Used for non processdata frames.
@@ -487,29 +587,29 @@ int ecx_waitinframe(ecx_portt *port, uint8 idx, int timeout)
  */
 int ecx_srconfirm(ecx_portt *port, uint8 idx, int timeout)
 {
-   int wkc = EC_NOFRAME;
-   osal_timert timer1, timer2;
+	int wkc = EC_NOFRAME;
+	osal_timert timer1, timer2;
 
-   osal_timer_start (&timer1, timeout);
-   do
-   {
-      /* tx frame on primary and if in redundant mode a dummy on secondary */
-      ecx_outframe_red(port, idx);
-      if (timeout < EC_TIMEOUTRET)
-      {
-         osal_timer_start (&timer2, timeout);
-      }
-      else
-      {
-         /* normally use partial timeout for rx */
-         osal_timer_start (&timer2, EC_TIMEOUTRET);
-      }
-      /* get frame from primary or if in redundant mode possibly from secondary */
-      wkc = ecx_waitinframe_red(port, idx, &timer2);
-   /* wait for answer with WKC>=0 or otherwise retry until timeout */
-   } while ((wkc <= EC_NOFRAME) && !osal_timer_is_expired (&timer1));
+	osal_timer_start(&timer1, timeout);
+	do
+	{
+		/* tx frame on primary and if in redundant mode a dummy on secondary */
+		ecx_outframe_red(port, idx);
+		if (timeout < EC_TIMEOUTRET)
+		{
+			osal_timer_start(&timer2, timeout);
+		}
+		else
+		{
+			/* normally use partial timeout for rx */
+			osal_timer_start(&timer2, EC_TIMEOUTRET);
+		}
+		/* get frame from primary or if in redundant mode possibly from secondary */
+		wkc = ecx_waitinframe_red(port, idx, &timer2);
+		/* wait for answer with WKC>=0 or otherwise retry until timeout */
+	} while ((wkc <= EC_NOFRAME) && !osal_timer_is_expired(&timer1));
 
-   return wkc;
+	return wkc;
 }
 
 #ifdef EC_VER1
