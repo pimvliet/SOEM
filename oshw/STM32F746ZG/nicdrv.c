@@ -38,48 +38,48 @@
 #include "socket_w5500.h"
 #include "w5500.h"
 
-int16_t sendRAW(uint8_t sn, uint8_t * buf, uint16_t len)
+int16_t sendRAW(uint8_t sn, uint8_t* buf, uint16_t len)
 {
 	while(1)
 	{
-		uint16_t freesize = getSn_TX_FSR(0);
-		if (getSn_SR(0) == SOCK_CLOSED)
+		uint16_t freesize = getSn_TX_FSR(sn);
+		if (getSn_SR(sn) == SOCK_CLOSED)
 			return -1;
 		if (len <= freesize)
 			break;
 	}
 
-	wiz_send_data(0, buf, len);
-	setSn_CR(0, Sn_CR_SEND);
+	wiz_send_data(sn, buf, len);
+	setSn_CR(sn, Sn_CR_SEND);
 
 	while(1)
 	{
-		uint8_t tmp = getSn_IR(0);
+		uint8_t tmp = getSn_IR(sn);
 		if (tmp & Sn_IR_SENDOK)
 		{
-			setSn_IR(0, Sn_IR_SENDOK);
+			setSn_IR(sn, Sn_IR_SENDOK);
 			break;
 		}
 		else if (tmp & Sn_IR_TIMEOUT)
 		{
-			setSn_IR(0, Sn_IR_TIMEOUT);
+			setSn_IR(sn, Sn_IR_TIMEOUT);
 			return -1;
 		}
 	}
 	return len;
 }
 
-uint16_t recvRAW(uint8_t sn, uint8_t * buf, uint16_t bufsize)
+uint16_t recvRAW(uint8_t sn, uint8_t* buf, uint16_t bufsize)
 {
-	uint16_t len = getSn_RX_RSR(0);
+	uint16_t len = getSn_RX_RSR(sn);
 
 	if (len > 0)
 	{
 		uint8_t head[2];
 		uint16_t data_len = 0;
 
-		wiz_recv_data(0, head, 2);
-		setSn_CR(0, Sn_CR_RECV);
+		wiz_recv_data(sn, head, 2);
+		setSn_CR(sn, Sn_CR_RECV);
 
 		data_len = head[0];
 		data_len = (data_len << 8) + head[1];
@@ -87,13 +87,13 @@ uint16_t recvRAW(uint8_t sn, uint8_t * buf, uint16_t bufsize)
 
 		if (data_len > bufsize)
 		{
-			wiz_recv_ignore(0, data_len);
-			setSn_CR(0, Sn_CR_RECV);
+			wiz_recv_ignore(sn, data_len);
+			setSn_CR(sn, Sn_CR_RECV);
 			return 0;
 		}
 
-		wiz_recv_data(0, buf, data_len);
-		setSn_CR(0, Sn_CR_RECV);
+		wiz_recv_data(sn, buf, data_len);
+		setSn_CR(sn, Sn_CR_RECV);
 
 		if ((buf[0] & 0x01) || memcpy(&buf[0], priMAC, 6) == 0)
 			return data_len;
