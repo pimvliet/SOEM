@@ -89,7 +89,7 @@ void W5500IOInit()
 void W5500Init(GPIO_TypeDef* csPort, uint16_t csPin, GPIO_TypeDef* rstPort, uint16_t rstPin)
 {
 	uint8_t tmp;
-	uint8_t memsize[2][8] = {{2, 2, 2, 2, 2, 2, 2, 2}, {2, 2, 2, 2, 2, 2, 2, 2}};	//TODO CHECK IF 8 SOCKETS ARE NEEDED
+	uint8_t memsize[2][8] = {{16, 0, 0, 0, 0, 0, 0, 0}, {16, 0, 0, 0, 0, 0, 0, 0}};
 
 	m_csPin = csPin;
 	m_csPort = csPort;
