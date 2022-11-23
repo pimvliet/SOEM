@@ -6,51 +6,58 @@
 extern SPI_HandleTypeDef hspi1;
 
 uint16_t m_csPin;
-GPIO_TypeDef* m_csPort;
+GPIO_TypeDef *m_csPort;
 
 uint16_t m_rstPin;
-GPIO_TypeDef* m_rstPort;
+GPIO_TypeDef *m_rstPort;
 
-uint8_t SPIReadWrite(uint8_t data)
+SPI_TypeDef *SPI;
+
+void wizchip_select(void)
 {
-	//wait until FIFO has a free slot
-	SPI_TypeDef* SPI = hspi1.Instance;
+	//m_csPort->BSRR = (uint32_t)m_csPin << 16;
+	m_csPort->BSRR = 0x00100000;					// CALCULATED FOR PIN 4
+}
+
+void wizchip_deselect(void)
+{
+	//m_csPort->BSRR = m_csPin;
+	m_csPort->BSRR = 0x0010;						// CALCULATED FOR PIN 4
+}
+
+uint8_t wizchip_read(void)
+{
 	while (!(SPI->SR & SPI_FLAG_TXE));
 
-	*(__IO uint8_t*) &SPI->DR = data;
+	*(__IO uint8_t*) &SPI->DR = 0x00;
 
 	while (!(SPI->SR & SPI_FLAG_RXNE));
 
 	return (*(__IO uint8_t*) &SPI->DR);
 }
 
-void wizchip_select(void)
+void wizchip_write(uint8_t writeByte)
 {
-	HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_RESET);
-}
+	while (!(SPI->SR & SPI_FLAG_TXE));
 
-void wizchip_deselect(void)
-{
-	HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_SET);
-}
+	*(__IO uint8_t*) &SPI->DR = writeByte;
 
-uint8_t wizchip_read(void)
-{
-	uint8_t readBit;
-	readBit = SPIReadWrite(0x00);
-	return readBit;
-}
+	while (!(SPI->SR & SPI_FLAG_RXNE));
 
-void wizchip_write(uint8_t writeBit)
-{
-	SPIReadWrite(writeBit);
+	(*(__IO uint8_t*) &SPI->DR);
 }
 
 void wizchip_readburst(uint8_t *pBuf, uint16_t len)
 {
 	for (uint16_t i = 0; i < len; i++)
 	{
-		*pBuf = SPIReadWrite(0x00);
+		while (!(SPI->SR & SPI_FLAG_TXE));
+
+		*(__IO uint8_t*) &SPI->DR = 0x00;
+
+		while (!(SPI->SR & SPI_FLAG_RXNE));
+
+		*pBuf =  (*(__IO uint8_t*) &SPI->DR);
 		pBuf++;
 	}
 }
@@ -59,16 +66,23 @@ void wizchip_writeburst(uint8_t *pBuf, uint16_t len)
 {
 	for (uint16_t i = 0; i < len; i++)
 	{
-		SPIReadWrite(*pBuf);
+		while (!(SPI->SR & SPI_FLAG_TXE));
+
+		*(__IO uint8_t*) &SPI->DR = *pBuf;
+
+		while (!(SPI->SR & SPI_FLAG_RXNE));
+
+		(*(__IO uint8_t*) &SPI->DR);
 		pBuf++;
 	}
 }
 
 void W5500IOInit()
 {
-	GPIO_InitTypeDef GPIO_InitStruct = {0};
+	GPIO_InitTypeDef GPIO_InitStruct =
+	{ 0 };
 
-																					//TODO change to conditional clock enables
+	//TODO change to conditional clock enables
 	__HAL_RCC_GPIOA_CLK_ENABLE();
 	__HAL_RCC_GPIOB_CLK_ENABLE();
 
@@ -86,10 +100,13 @@ void W5500IOInit()
 	HAL_GPIO_Init(m_rstPort, &GPIO_InitStruct);
 }
 
-void W5500Init(GPIO_TypeDef* csPort, uint16_t csPin, GPIO_TypeDef* rstPort, uint16_t rstPin)
+int W5500Init(GPIO_TypeDef *csPort, uint16_t csPin, GPIO_TypeDef *rstPort,
+		uint16_t rstPin)
 {
-	uint8_t tmp;
-	uint8_t memsize[2][8] = {{16, 0, 0, 0, 0, 0, 0, 0}, {16, 0, 0, 0, 0, 0, 0, 0}};
+	uint8_t memsize[2][8] =
+	{
+	{ 16, 0, 0, 0, 0, 0, 0, 0 },
+	{ 16, 0, 0, 0, 0, 0, 0, 0 } };
 
 	m_csPin = csPin;
 	m_csPort = csPort;
@@ -98,22 +115,22 @@ void W5500Init(GPIO_TypeDef* csPort, uint16_t csPin, GPIO_TypeDef* rstPort, uint
 
 	W5500IOInit();
 
-
 	HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_SET);
 
 	HAL_GPIO_WritePin(m_rstPort, m_rstPin, GPIO_PIN_RESET);
 	HAL_Delay(10);
 	HAL_GPIO_WritePin(m_rstPort, m_rstPin, GPIO_PIN_SET);
 
+	SPI = hspi1.Instance;
+
 	reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
 	reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
 	reg_wizchip_spiburst_cbfunc(wizchip_readburst, wizchip_writeburst);
-#if 1
-	if (ctlwizchip(CW_INIT_WIZCHIP, (void*)memsize) == -1)
-	{
-		printf("WIZCHIP Initialize fail.\r\n");
-		while(1);																	//TODO remove infinite loop
-	}
-#endif
-	printf("WIZCHIP Initialize success.\r\n");
+
+	m_csPort->BSRR = (uint32_t) m_csPin << 16;
+
+	if (ctlwizchip(CW_INIT_WIZCHIP, (void*) memsize) == -1)
+		return 1;
+	else
+		return 0;
 }
