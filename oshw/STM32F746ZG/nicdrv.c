@@ -345,7 +345,6 @@ int ecx_outframe(ecx_portt *port, uint8 idx, int stacknumber)
  */
 int ecx_outframe_red(ecx_portt *port, uint8 idx)
 {
-	ec_comt *datagramP;
 	ec_etherheadert *ehp;
 	int rval;
 
@@ -356,6 +355,8 @@ int ecx_outframe_red(ecx_portt *port, uint8 idx)
 	rval = ecx_outframe(port, idx, 0);
 	/* Redundancy is not supported using a single port */
 #if 0
+	ec_comt *datagramP;
+
 	if (port->redstate != ECT_RED_NONE)
 	{
 		ehp = (ec_etherheadert*) &(port->txbuf2);
