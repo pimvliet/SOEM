@@ -17,6 +17,17 @@ void osal_timer_start(osal_timert *self, uint32 timeout_us)
 	}
 }
 
+void osal_timer_add_time(osal_timert * self, uint32_t timeout_us)
+{
+	self->stop_time.usec += (timeout_us % 1000000);
+	self->stop_time.sec += (timeout_us / 1000000);
+	if (self->stop_time.usec >= 1000000)
+	{
+		self->stop_time.usec -= 1000000;
+		self->stop_time.sec++;
+	}
+}
+
 boolean osal_timer_is_expired(osal_timert *self)
 {
 	boolean expired = FALSE;
